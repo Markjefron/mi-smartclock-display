@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Custom Clock Face</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0b0d12;
+    color: #fff;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+    cursor: none;
+  }
+  #bg {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: 0; display: none;
+  }
+  #shade { position: fixed; inset: 0; z-index: 1; display: none;
+    background: rgba(0,0,0,.35); }
+  body.has-bg .wrap { background: none; }
+  body.has-bg .time, body.has-bg .date, body.has-bg .top, body.has-bg .msg {
+    text-shadow: 0 0 2vh rgba(0,0,0,.8);
+  }
+  .wrap {
+    position: relative; z-index: 2;
+    height: 100%;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 2vh;
+    background: radial-gradient(circle at 50% 40%, #1a2030 0%, #0b0d12 70%);
+  }
+  .top {
+    display: flex; gap: 4vw; align-items: center;
+    font-size: 5.5vh; color: #b8c0d0; letter-spacing: .05em;
+  }
+  .weather { display: flex; align-items: center; gap: 1vw; }
+  .weather .icon { font-size: 7vh; }
+  .time {
+    font-size: 38vh; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: baseline;
+  }
+  .h  { color: #ffd166; }
+  .m  { color: #06d6a0; }
+  .colon { color: #ef476f; animation: blink 2s steps(1) infinite; margin: 0 .5vw; }
+  .ampm { font-size: 8vh; color: #8a93a6; margin-left: 1.5vw; font-weight: 600; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .date { font-size: 6.5vh; color: #e0e4ec; }
+  .msg  { font-size: 4.5vh; color: #8a93a6; font-style: italic; }
+</style>
+</head>
+<body>
+<div id="shade"></div>
+<div class="wrap">
+  <div class="top">
+    <span id="place">Sandakan</span>
+    <span class="weather"><span class="icon" id="wIcon">⏳</span><span id="wTemp">--°</span></span>
+  </div>
+  <div class="time">
+    <span class="h" id="hh">--</span><span class="colon">:</span><span class="m" id="mm">--</span>
+    <span class="ampm" id="ap"></span>
+  </div>
+  <div class="date" id="date">—</div>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+  // ===== SETTINGS: edit these =====
+  const TZ = "Asia/Kuching";        // time zone
+  const LAT = 5.84, LON = 118.12;   // Sandakan
+  const USE_12H = true;             // false = 24-hour clock
+
+  // Background: put your file next to this page and type its name,
+  // e.g. "my-loop.mp4" or "cat.gif". Leave "" for no background.
+  const BACKGROUND = "my-loop.mp4";
+  const SHOW_CLOCK = true;          // false = show only the GIF/video
+  // =================================
+
+  if (BACKGROUND) {
+    const isVideo = /\.(mp4|webm|mov)$/i.test(BACKGROUND);
+    const el = document.createElement(isVideo ? "video" : "img");
+    el.id = "bg";
+    el.src = BACKGROUND;
+    if (isVideo) {
+      el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true;
+    }
+    el.style.display = "block";
+    document.body.prepend(el);
+    document.body.classList.add("has-bg");
+    if (SHOW_CLOCK) document.getElementById("shade").style.display = "block";
+  }
+  if (!SHOW_CLOCK) document.querySelector(".wrap").style.display = "none";
+
+  const pad = n => String(n).padStart(2, "0");
+
+  function tick() {
+    const now = new Date();
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: TZ, hour: "numeric", minute: "numeric", hour12: false,
+        weekday: "long", day: "numeric", month: "long"
+      }).formatToParts(now).map(x => [x.type, x.value])
+    );
+    let h = parseInt(p.hour, 10) % 24;
+    const m = p.minute;
+    let ap = "";
+    if (USE_12H) { ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; }
+    document.getElementById("hh").textContent = USE_12H ? h : pad(h);
+    document.getElementById("mm").textContent = m;
+    document.getElementById("ap").textContent = ap;
+    document.getElementById("date").textContent = `${p.weekday}, ${p.day} ${p.month}`;
+
+    const hr = parseInt(p.hour, 10);
+    document.getElementById("msg").textContent =
+      hr < 5 ? "Get some rest 🌙" :
+      hr < 12 ? "Good morning ☀️" :
+      hr < 18 ? "Good afternoon 🌤️" : "Good evening 🌆";
+  }
+
+  const ICONS = c =>
+    c === 0 ? "☀️" : c <= 2 ? "🌤️" : c === 3 ? "☁️" :
+    c <= 48 ? "🌫️" : c <= 67 ? "🌧️" : c <= 77 ? "🌨️" :
+    c <= 82 ? "🌦️" : "⛈️";
+
+  async function weather() {
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+                  `&current=temperature_2m,weather_code&timezone=${encodeURIComponent(TZ)}`;
+      const d = await (await fetch(url)).json();
+      document.getElementById("wTemp").textContent = Math.round(d.current.temperature_2m) + "°C";
+      document.getElementById("wIcon").textContent = ICONS(d.current.weather_code);
+    } catch (e) {
+      document.getElementById("wIcon").textContent = "";
+    }
+  }
+
+  tick(); setInterval(tick, 1000);
+  weather(); setInterval(weather, 15 * 60 * 1000);
+</script>
+</body>
+</html>
